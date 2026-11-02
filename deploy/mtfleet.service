@@ -1,0 +1,24 @@
+[Unit]
+Description=MikroTik Fleet Controller
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+# Edit WorkingDirectory and ExecStart if your path differs from /home/joel/fleet
+WorkingDirectory=/home/joel/fleet
+EnvironmentFile=/etc/mtfleet.env
+ExecStart=/home/joel/fleet/.venv/bin/uvicorn app:app --host 0.0.0.0 --port 8080
+Restart=on-failure
+RestartSec=3
+
+# Run under a non-login service account (see install script). Comment out to run as root.
+User=mtfleet
+Group=mtfleet
+
+# Light hardening
+NoNewPrivileges=true
+ProtectSystem=full
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

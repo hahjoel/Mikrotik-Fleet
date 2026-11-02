@@ -1,0 +1,17 @@
+# Runtime data — never commit
+routers.json
+routers.tmp
+backups/
+*.backup
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# Secrets
+*.env
+!deploy/mtfleet.env.example
+
+# OS
+.DS_Store

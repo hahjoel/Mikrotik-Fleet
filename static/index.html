@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>MikroTik Fleet</title>
+<script>
+  // apply saved theme before paint (no flash); default follows the OS setting
+  (function(){ var t; try { t = localStorage.getItem("theme"); } catch(e){}
+    if (!t) t = matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+    document.documentElement.dataset.theme = t; })();
+</script>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header>
+  <h1>MikroTik Fleet</h1>
+  <span class="sum" id="sum">—</span>
+  <span class="sp"></span>
+  <label class="hint"><input type="checkbox" id="auto" checked> auto-refresh 30s</label>
+  <button id="themeBtn" title="Toggle light / dark mode"></button>
+  <button id="lastOut" disabled title="Reopen the last results">Last output</button>
+  <button id="refresh">Refresh</button>
+  <button class="primary" id="addBtn">+ Add router</button>
+</header>
+
+<main>
+  <section class="panel">
+    <h2>Routers <span class="sp"></span>
+      <select id="groupFilter"><option value="">All groups</option></select>
+    </h2>
+    <div class="tw">
+      <table>
+        <thead><tr>
+          <th><input type="checkbox" id="selAll"></th>
+          <th></th><th>Name</th><th>Host</th><th>Via</th><th>Identity</th>
+          <th>Version</th><th>Board</th><th>Uptime</th><th>CPU</th><th>Mem</th><th class="num">ms</th><th></th>
+        </tr></thead>
+        <tbody id="rows"></tbody>
+      </table>
+      <div class="empty" id="empty" hidden>No routers yet. Click <b>+ Add router</b>.</div>
+    </div>
+  </section>
+
+  <aside class="side">
+    <section class="panel">
+      <h2>Run on <span id="selCount">0</span> selected</h2>
+      <div class="box">
+        <textarea id="cmd" placeholder="/ip address print"></textarea>
+        <div class="hint">API routers: CLI-style (<code>/ip address add address=10.0.0.1/24 interface=ether2</code>) or API-style (<code>/ip/address/print</code>). SSH routers: any RouterOS CLI.</div>
+        <div class="row"><button class="primary" id="runBtn">Run</button><span class="hint">Ctrl+Enter</span></div>
+        <div class="qa" id="qa"></div>
+        <div class="row"><button id="usersBtn" style="flex:1">Manage users…</button><button id="updBtn" style="flex:1">Update RouterOS…</button></div>
+      </div>
+    </section>
+    <section class="panel">
+      <h2>Backups <span class="sp"></span><button class="link" id="bkRefresh">refresh</button></h2>
+      <div id="bk" class="bk"></div>
+    </section>
+  </aside>
+</main>
+
+<dialog id="dlg">
+  <form method="dialog" id="frm">
+    <label class="full">Name<input name="name" required></label>
+    <label>Host / IP<input name="host" required></label>
+    <label>Group<input name="group" placeholder="optional"></label>
+    <label>Method
+      <select name="method"><option value="api">RouterOS API</option><option value="ssh">SSH</option></select>
+    </label>
+    <label>Port<input name="port" type="number" placeholder="auto"></label>
+    <label>Username<input name="username" value="admin" required></label>
+    <label>Password<input name="password" type="password" autocomplete="new-password"></label>
+    <label class="full">SSH port for backup downloads (API routers)<input name="ssh_port" type="number" placeholder="22"></label>
+    <label class="chk full"><input type="checkbox" name="api_ssl"> Use API-SSL (8729)</label>
+    <label class="chk full"><input type="checkbox" name="verify_ssl"> Verify TLS certificate</label>
+    <div class="act">
+      <button type="button" class="danger" id="delBtn" hidden>Delete</button>
+      <span style="flex:1"></span>
+      <button type="button" id="cancel">Cancel</button>
+      <button class="primary" type="submit">Save</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="usersDlg" class="users-dlg">
+  <form id="usersForm">
+    <h3>Manage users on <span id="usersCount">0</span> selected router(s)</h3>
+    <p class="hint">Keeps the accounts you list (and the account the app logs in with), optionally creates one account, and <b>removes every other account</b>. The new account is created before anything is deleted.</p>
+    <label class="full">Keep these accounts (comma-separated)
+      <input id="uKeep" value="admin, dmon"></label>
+    <div class="urow">
+      <label>Ensure this account exists<input id="uName" value="dmon" placeholder="e.g. dmon"></label>
+      <label>Group<input id="uGroup" value="full"></label>
+    </div>
+    <label class="full">Password for the new account
+      <input id="uPass" type="password" autocomplete="new-password" placeholder="only used if the account is created">
+      <span class="hint">Only applied when the account doesn't already exist. Not stored by this app.</span></label>
+    <label class="full">SSH public key for the account (optional)
+      <textarea id="uKey" rows="3" placeholder="ssh-rsa AAAA..."></textarea>
+      <span class="hint">Replaces that account's existing keys. Needs SSH reachable on the router (the backup SSH port for API routers).</span></label>
+    <div id="uResult" hidden></div>
+    <div class="uact">
+      <button type="button" id="uCancel">Cancel</button>
+      <span style="flex:1"></span>
+      <button type="button" id="uPreview">Preview changes</button>
+      <button type="button" class="danger" id="uApply" disabled>Apply</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="updDlg" class="users-dlg">
+  <form id="updForm">
+    <h3>Update RouterOS on <span id="updCount">0</span> selected router(s)</h3>
+    <p class="hint">Checks each router against MikroTik's upgrade server. <b>Install</b> then upgrades only the routers that are out of date — each one downloads the new version and <b>reboots itself</b> to apply it. Routers already current are skipped.</p>
+    <div id="updResult" hidden></div>
+    <div class="uact">
+      <button type="button" id="updCancel">Cancel</button>
+      <span style="flex:1"></span>
+      <button type="button" id="updCheck">Check for updates</button>
+      <button type="button" class="danger" id="updApply" disabled>Install updates</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="outDlg" class="out-dlg">
+  <div class="out-head">
+    <b id="outTitle">Output</b>
+    <span class="hint" id="outMeta"></span>
+    <span class="sp"></span>
+    <button class="link" id="outCopy">copy all</button>
+    <button class="link" id="outMax" title="Maximize / restore">⤢</button>
+    <button class="link" id="outClose" aria-label="Close">✕</button>
+  </div>
+  <div id="out"></div>
+</dialog>
+
+<dialog id="trafDlg" class="out-dlg traf-dlg">
+  <div class="out-head">
+    <b id="trafTitle">Traffic</b>
+    <span class="hint" id="trafMeta"></span>
+    <span class="sp"></span>
+    <span class="legend"><i class="sw" style="background:var(--rx)"></i>Rx (in)
+      <i class="sw" style="background:var(--tx)"></i>Tx (out)</span>
+    <select id="trafView" title="View">
+      <option value="total">Router total</option><option value="iface">Per interface</option>
+    </select>
+    <label class="hint iface-only"><input type="checkbox" id="trafHide" checked> active only</label>
+    <select id="trafSort" title="Sort" class="iface-only">
+      <option value="name">Router order</option><option value="busy">Busiest first</option>
+    </select>
+    <select id="trafInterval" title="Refresh every">
+      <option value="2">2s</option><option value="5" selected>5s</option><option value="10">10s</option>
+    </select>
+    <button class="link" id="trafMax" title="Maximize / restore">⤢</button>
+    <button class="link" id="trafClose" aria-label="Close">✕</button>
+  </div>
+  <div class="traf-total" id="trafTotal">
+    <div class="tot-stats">
+      <div class="tot-stat"><div class="tot-lbl"><i class="sw" style="background:var(--rx)"></i>Rx (in)</div><div class="tot-val" id="totRx">…</div><div class="hint" id="totRxB"></div></div>
+      <div class="tot-stat"><div class="tot-lbl"><i class="sw" style="background:var(--tx)"></i>Tx (out)</div><div class="tot-val" id="totTx">…</div><div class="hint" id="totTxB"></div></div>
+      <div class="hint tot-note" id="totNote"></div>
+    </div>
+    <div class="tot-chart">
+      <div class="hint tot-peak" id="totPeak"></div>
+      <div class="tot-canvas"><canvas class="spark big" data-name="__total__"></canvas></div>
+      <div class="hint tot-axis"><span id="totSpan"></span><span>now</span></div>
+    </div>
+  </div>
+  <div class="traf-body" id="trafIface">
+    <table>
+      <thead><tr>
+        <th>Interface</th><th>Type</th><th>Status</th>
+        <th class="num">Rx</th><th class="num">Tx</th><th>Last 60 samples</th>
+        <th class="num">Total Rx</th><th class="num">Total Tx</th>
+      </tr></thead>
+      <tbody id="trafRows"></tbody>
+    </table>
+    <div class="empty" id="trafEmpty" hidden>No active interfaces. Untick “active only” to see all.</div>
+  </div>
+  <div id="trafTip" class="traf-tip" hidden></div>
+</dialog>
+
+<script src="/static/app.js"></script>
+<script src="/static/traffic.js"></script>
+</body>
+</html>
