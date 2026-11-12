@@ -315,6 +315,58 @@ $("#updApply").onclick = async ()=>{
   loadStatus();
 };
 
+// ------------------------------------------------------- RouterBOOT firmware
+function fwRender(results){
+  const el = $("#fwResult"); el.hidden = false;
+  let avail = 0;
+  el.innerHTML = Object.entries(results).map(([id,res])=>{
+    const r = routers.find(x=>x.id===id) || {name:id};
+    const x = res.ok ? res.result : null;
+    if (x?.available && !x.action) avail++;
+    const tag = !x ? "" :
+      x.action==="rebooting" ? `<span class="tag" style="color:var(--warn)">upgraded · rebooting</span>` :
+      x.action==="pending-reboot" ? `<span class="tag" style="color:var(--warn)">upgraded · reboot pending</span>` :
+      x.action==="unconfirmed" ? `<span class="tag" style="color:var(--bad)">not confirmed</span>` :
+      !x.routerboard ? `<span class="tag">no RouterBOOT</span>` :
+      x.available ? `<span class="tag" style="color:var(--warn)">firmware update</span>` :
+      `<span class="tag" style="color:var(--ok)">current</span>`;
+    return `<div class="res ${res.ok&&x.action!=="unconfirmed"?"":"fail"}"><div class="h">
+      <span class="dot ${res.ok?"on":"off"}"></span><b>${esc(r.name)}</b>${tag}</div>
+      <pre>${esc(res.ok?x.text:res.error)}</pre></div>`;
+  }).join("");
+  return avail;
+}
+async function fwCall(apply){
+  if (!selected.size) { alert("Select at least one router first."); return; }
+  ["#fwCheck","#fwApply","#fwCancel"].forEach(b=>$(b).disabled=true);
+  $("#fwResult").hidden = false;
+  $("#fwResult").innerHTML = `<div class="hint" style="padding:12px"><span class="spin"></span>${apply?"Upgrading firmware (waits for each router to confirm before rebooting)":"Checking firmware"} on ${selected.size} router(s)…</div>`;
+  try {
+    const res = await api("/api/firmware",{method:"POST",
+      body:JSON.stringify({router_ids:[...selected], apply, reboot:$("#fwReboot").checked})});
+    const avail = fwRender(res);
+    $("#fwApply").disabled = apply || avail===0;
+    $("#fwApply").textContent = avail && !apply ? `Upgrade firmware (${avail})` : "Upgrade firmware";
+  } catch(e){ $("#fwResult").innerHTML = `<div class="res fail"><pre>${esc(e.message)}</pre></div>`; }
+  $("#fwCheck").disabled = false; $("#fwCancel").disabled = false;
+}
+$("#fwBtn").onclick = ()=>{
+  if (!selected.size) { alert("Select the routers to update first."); return; }
+  $("#fwCount").textContent = selected.size;
+  $("#fwResult").hidden = true; $("#fwResult").innerHTML = "";
+  $("#fwApply").disabled = true; $("#fwApply").textContent = "Upgrade firmware";
+  $("#fwDlg").showModal();
+  fwCall(false);   // checking is read-only, so show the current state right away
+};
+$("#fwCancel").onclick = ()=>$("#fwDlg").close();
+$("#fwCheck").onclick = ()=>fwCall(false);
+$("#fwApply").onclick = async ()=>{
+  const rb = $("#fwReboot").checked;
+  if (!confirm(`Upgrade RouterBOOT firmware on the out-of-date routers${rb?" and reboot them":""}?\n\nDon't power them off during the upgrade.`)) return;
+  await fwCall(true);
+  loadStatus();
+};
+
 function setThemeIcon(){
   const light = document.documentElement.dataset.theme === "light";
   $("#themeBtn").textContent = light ? "☾" : "☀";

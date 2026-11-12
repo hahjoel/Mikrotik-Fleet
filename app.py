@@ -788,6 +788,135 @@ async def updates(body: UpdateReq, _=Depends(auth)):
     return {r.id: res for r, res in zip(targets, results)}
 
 
+# ------------------------------------------------------- RouterBOOT firmware
+# RouterBOOT (the bootloader firmware) is upgraded separately from RouterOS.
+# Each RouterOS release bundles a firmware version ("upgrade-firmware"); the
+# board keeps running its old firmware ("current-firmware") until you run
+# /system routerboard upgrade AND reboot.
+FW_LOG_MATCH = "firmware upgraded"   # RouterOS logs "Firmware upgraded successfully, please reboot..."
+FW_CONFIRM_WAIT = float(os.environ.get("FLEET_FW_WAIT", "60"))
+
+
+def firmware_info(r: Router) -> dict:
+    if r.method == "api":
+        api = api_connect(r)
+        try:
+            row = list(api("/system/routerboard/print"))[0]
+        finally:
+            api.close()
+    else:
+        row = ssh_kv(ssh_run(r, "/system routerboard print"))
+    is_rb = as_bool(row.get("routerboard", "yes"))
+    current = str(row.get("current-firmware", "") or "")
+    upgrade = str(row.get("upgrade-firmware", "") or "")
+    return {
+        "routerboard": is_rb,
+        "model": row.get("model") or row.get("board-name") or "",
+        "firmware_type": row.get("firmware-type", ""),
+        "current": current,
+        "upgrade": upgrade,
+        "available": is_rb and bool(current) and bool(upgrade) and current != upgrade,
+    }
+
+
+def fw_log_count(r: Router) -> int:
+    """How many 'firmware upgraded' lines are in the router's log right now."""
+    if r.method == "api":
+        api = api_connect(r)
+        try:
+            rows = list(api("/log/print"))
+        finally:
+            api.close()
+        return sum(FW_LOG_MATCH in str(x.get("message", "")).lower() for x in rows)
+    out = ssh_run(r, '/log print where message~"irmware upgraded"')
+    return sum(FW_LOG_MATCH in l.lower() for l in out.splitlines())
+
+
+def _fw_text(info: dict, note: str | None) -> str:
+    if not info["routerboard"]:
+        return "Not a RouterBOARD (CHR / x86) — there is no RouterBOOT firmware to upgrade."
+    lines = [f"Model: {info['model'] or '?'}" + (f"    ({info['firmware_type']})" if info["firmware_type"] else ""),
+             f"Current firmware: {info['current'] or '?'}    Bundled with RouterOS: {info['upgrade'] or '?'}"]
+    if note:
+        lines.append(note)
+    elif info["available"]:
+        lines.append(f"Firmware upgrade available: {info['current']} → {info['upgrade']}")
+    else:
+        lines.append("Firmware matches the installed RouterOS — nothing to do")
+    return "\n".join(lines)
+
+
+def update_firmware(r: Router, apply: bool, reboot: bool) -> dict:
+    info = firmware_info(r)
+    if not apply or not info["available"]:
+        info["text"] = _fw_text(info, "Already current — skipped." if apply and info["routerboard"] else None)
+        if apply:
+            info["action"] = "skipped"
+        return info
+
+    before = fw_log_count(r)
+    # write the new RouterBOOT to flash (the API never prompts; over SSH,
+    # :execute avoids the interactive "Do you really want to upgrade?" prompt)
+    if r.method == "api":
+        api = api_connect(r)
+        try:
+            list(api("/system/routerboard/upgrade"))
+        finally:
+            api.close()
+    else:
+        ssh_run(r, ':execute "/system routerboard upgrade"')
+
+    # only reboot once the router confirms the firmware was written
+    deadline = time.time() + FW_CONFIRM_WAIT
+    confirmed = False
+    while time.time() < deadline:
+        time.sleep(3)
+        if fw_log_count(r) > before:
+            confirmed = True
+            break
+    if not confirmed:
+        info["action"] = "unconfirmed"
+        info["text"] = _fw_text(info, (
+            f"Upgrade command sent, but the router didn't log 'Firmware upgraded successfully' "
+            f"within {int(FW_CONFIRM_WAIT)}s, so it was NOT rebooted. Check /log on the router "
+            f"and reboot it yourself once the upgrade is confirmed."))
+        return info
+
+    note = f"Firmware written: {info['current']} → {info['upgrade']}."
+    if reboot:
+        try:
+            if r.method == "api":
+                api_run(r, "/system/reboot")
+            else:
+                ssh_run(r, ':execute "/system reboot"')
+        except Exception:
+            pass  # connection drops as the router goes down — expected
+        note += " Rebooting now to load it (takes a minute or two)."
+        info["action"] = "rebooting"
+    else:
+        note += " It takes effect at the next reboot."
+        info["action"] = "pending-reboot"
+    info["text"] = _fw_text(info, note)
+    return info
+
+
+class FirmwareReq(BaseModel):
+    router_ids: list[str]
+    apply: bool = False
+    reboot: bool = True
+
+
+@app.post("/api/firmware")
+async def firmware(body: FirmwareReq, _=Depends(auth)):
+    rs = load()
+    targets = [rs[i] for i in body.router_ids if i in rs]
+    if not targets:
+        raise HTTPException(400, "No valid routers selected")
+    results = await asyncio.gather(
+        *(safe(update_firmware, r, body.apply, body.reboot) for r in targets))
+    return {r.id: res for r, res in zip(targets, results)}
+
+
 @app.get("/api/backups")
 def list_backups(_=Depends(auth)):
     rs = load()

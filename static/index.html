@@ -51,6 +51,7 @@
         <div class="row"><button class="primary" id="runBtn">Run</button><span class="hint">Ctrl+Enter</span></div>
         <div class="qa" id="qa"></div>
         <div class="row"><button id="usersBtn" style="flex:1">Manage users…</button><button id="updBtn" style="flex:1">Update RouterOS…</button></div>
+        <div class="row"><button id="fwBtn" style="flex:1">Update firmware (RouterBOOT)…</button></div>
       </div>
     </section>
     <section class="panel">
@@ -119,6 +120,21 @@
       <span style="flex:1"></span>
       <button type="button" id="updCheck">Check for updates</button>
       <button type="button" class="danger" id="updApply" disabled>Install updates</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="fwDlg" class="users-dlg">
+  <form id="fwForm">
+    <h3>Update RouterBOOT firmware on <span id="fwCount">0</span> selected router(s)</h3>
+    <p class="hint">RouterBOOT is the board's bootloader firmware, separate from RouterOS. Every RouterOS release ships a matching firmware, but the board keeps running its old one until it's upgraded <b>and rebooted</b>. Update RouterOS first, then use this. Routers whose firmware already matches, and CHR/x86 routers, are skipped.</p>
+    <label class="chk" style="flex-direction:row;align-items:center;gap:6px;color:var(--text)"><input type="checkbox" id="fwReboot" checked> Reboot after upgrading (the new firmware only loads on reboot)</label>
+    <div id="fwResult" hidden></div>
+    <div class="uact">
+      <button type="button" id="fwCancel">Cancel</button>
+      <span style="flex:1"></span>
+      <button type="button" id="fwCheck">Check firmware</button>
+      <button type="button" class="danger" id="fwApply" disabled>Upgrade firmware</button>
     </div>
   </form>
 </dialog>

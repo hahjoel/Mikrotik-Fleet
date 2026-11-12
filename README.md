@@ -9,6 +9,7 @@ RouterOS API (8728, or API-SSL on 8729) or SSH. Each router picks its own method
 - Run any command on one or many selected routers in parallel; output per router
 - Quick actions: interfaces, IPs, routes, DHCP leases, log, export (SSH), backup, update check, reboot
 - Update RouterOS: select routers → **Update RouterOS…** to check each against MikroTik's upgrade server, then install updates on just the out-of-date ones (each downloads and reboots). Check first; Install only acts on routers behind the latest version
+- Update firmware (RouterBOOT): select routers → **Update firmware (RouterBOOT)…** to compare each board's `current-firmware` with the `upgrade-firmware` bundled in its installed RouterOS, then run `/system routerboard upgrade` on just the out-of-date ones. The manager waits for the router to log *Firmware upgraded successfully* before rebooting it (optional, on by default; the new firmware only loads after a reboot). If the router doesn't confirm, it is **not** rebooted. CHR/x86 routers are skipped. Update RouterOS first, then firmware
 - Manage users: select routers → **Manage users…** to keep a named set of accounts, create/ensure one account (optionally with an SSH public key), and remove all others. Preview shows every change before you apply it; the login account is always kept and the new account is created before any deletion
 - Live interface bandwidth: click **traffic** on any router for per-interface Rx/Tx rates, a 60-sample history chart, and total counters (2/5/10s refresh)
 - Backups: **Save backup** creates an unencrypted `.backup` named `<identity>-<date>-<time>` (falls back to the IP if the identity can't be read) on each selected router, downloads it to the server over SFTP (`backups/<router-id>/`), and lists it in the Backups panel for download
@@ -83,6 +84,7 @@ port). User-management commands check RouterOS's reply and report any per-router
 | FLEET_BACKUPS | ./backups | Where downloaded backups are kept |
 | FLEET_TIMEOUT | 8 | Per-router connect timeout (s) |
 | FLEET_WORKERS | 32 | Max parallel connections |
+| FLEET_FW_WAIT | 60 | Seconds to wait for a router to confirm a firmware upgrade before giving up (no reboot) |
 
 ## Security notes
 - Router passwords are stored in plain text in `routers.json`; protect the host.
