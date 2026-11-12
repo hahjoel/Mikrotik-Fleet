@@ -18,10 +18,11 @@ function bar(v){ if(v==null||v==="") return "—"; v=+v;
   return `<span class="bar"><i class="${v>80?'hi':''}" style="width:${Math.min(v,100)}%"></i></span>${v}%`; }
 
 function fwCell(s){
+  // Current RouterBOOT the board is running (= "current-firmware").
   if (!s.firmware) return `<span class="hint" title="No RouterBOOT (CHR/x86) or not readable">—</span>`;
   const up = s.firmware_upgrade && s.firmware_upgrade !== s.firmware;
-  return esc(s.firmware) + (up ? ` <span class="tag" style="color:var(--warn);border-color:var(--warn)"
-    title="Installed RouterOS bundles RouterBOOT ${esc(s.firmware_upgrade)} — use Update firmware (RouterBOOT)…">⬆ ${esc(s.firmware_upgrade)}</span>` : "");
+  return esc(s.firmware) + (up ? ` <span style="color:var(--warn);cursor:help"
+    title="Upgrade available: installed RouterOS bundles RouterBOOT ${esc(s.firmware_upgrade)}. Use Update firmware (RouterBOOT)…">⬆</span>` : "");
 }
 
 function render(){
