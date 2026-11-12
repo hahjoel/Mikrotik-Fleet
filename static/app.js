@@ -17,6 +17,13 @@ const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;
 function bar(v){ if(v==null||v==="") return "—"; v=+v;
   return `<span class="bar"><i class="${v>80?'hi':''}" style="width:${Math.min(v,100)}%"></i></span>${v}%`; }
 
+function fwCell(s){
+  if (!s.firmware) return `<span class="hint" title="No RouterBOOT (CHR/x86) or not readable">—</span>`;
+  const up = s.firmware_upgrade && s.firmware_upgrade !== s.firmware;
+  return esc(s.firmware) + (up ? ` <span class="tag" style="color:var(--warn);border-color:var(--warn)"
+    title="Installed RouterOS bundles RouterBOOT ${esc(s.firmware_upgrade)} — use Update firmware (RouterBOOT)…">⬆ ${esc(s.firmware_upgrade)}</span>` : "");
+}
+
 function render(){
   const g = $("#groupFilter").value;
   const groups = [...new Set(routers.map(r=>r.group).filter(Boolean))].sort();
@@ -27,10 +34,10 @@ function render(){
   $("#rows").innerHTML = list.map(r=>{
     const s = status[r.id];
     const dot = !s ? "" : s.online ? "on" : "off";
-    const rest = !s ? `<td colspan="7" class="hint">checking…</td>` :
-      s.online ? `<td>${esc(s.identity)}</td><td>${esc(s.version)}</td><td>${esc(s.board)}</td>
+    const rest = !s ? `<td colspan="8" class="hint">checking…</td>` :
+      s.online ? `<td>${esc(s.identity)}</td><td>${esc(s.version)}</td><td>${esc(s.board)}</td><td>${fwCell(s)}</td>
         <td>${esc(s.uptime)}</td><td>${bar(s.cpu)}</td><td>${bar(s.mem)}</td><td class="num">${s.latency_ms}</td>`
-      : `<td colspan="7"><span class="err" title="${esc(s.error)}">${esc(s.error)}</span></td>`;
+      : `<td colspan="8"><span class="err" title="${esc(s.error)}">${esc(s.error)}</span></td>`;
     return `<tr>
       <td><input type="checkbox" data-sel="${r.id}" ${selected.has(r.id)?"checked":""}></td>
       <td><span class="dot ${dot}"></span></td>

@@ -208,6 +208,10 @@ def get_status(r: Router) -> dict:
         try:
             res = list(api("/system/resource/print"))[0]
             ident = list(api("/system/identity/print"))[0].get("name", "")
+            try:
+                rb = list(api("/system/routerboard/print"))[0]
+            except Exception:
+                rb = {}
         finally:
             api.close()
         free, total = res.get("free-memory", 0), res.get("total-memory", 1)
@@ -215,6 +219,10 @@ def get_status(r: Router) -> dict:
     else:
         res = ssh_kv(ssh_run(r, "/system resource print"))
         ident = ssh_kv(ssh_run(r, "/system identity print")).get("name", "")
+        try:
+            rb = ssh_kv(ssh_run(r, "/system routerboard print"))
+        except Exception:
+            rb = {}
         mem = None
         try:
             f = float(res["free-memory"].rstrip("KMGiB"))
@@ -227,6 +235,10 @@ def get_status(r: Router) -> dict:
         "identity": ident,
         "version": res.get("version"),
         "board": res.get("board-name"),
+        # RouterBOOT: what the board runs vs. what its installed RouterOS bundles.
+        # None on CHR/x86 (routerboard: no) or if it couldn't be read.
+        "firmware": (rb.get("current-firmware") or None) if as_bool(rb.get("routerboard", "yes")) else None,
+        "firmware_upgrade": (rb.get("upgrade-firmware") or None) if as_bool(rb.get("routerboard", "yes")) else None,
         "uptime": res.get("uptime"),
         "cpu": as_int(str(res.get("cpu-load", "")).rstrip("% ")) if res.get("cpu-load") not in (None, "") else None,
         "mem": mem,
